@@ -1,0 +1,1179 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>任務排程系統新模組開發 — 四階段成果摘要</title>
+<style>
+  :root {
+    --navy:    #0D1B2A;
+    --deep:    #1B2A3B;
+    --teal:    #00B4D8;
+    --accent:  #90E0EF;
+    --gold:    #F4A261;
+    --green:   #52B788;
+    --red:     #E63946;
+    --text:    #E8F1F8;
+    --muted:   #8EAABE;
+    --card:    rgba(255,255,255,0.05);
+    --border:  rgba(0,180,216,0.25);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif;
+    background: var(--navy);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* ── Deck layout ──────────────────────────────────────────── */
+  #deck {
+    width: 100%;
+    height: 100vh;
+    position: relative;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 3.5rem 5rem 2.5rem;
+    opacity: 0;
+    transform: translateX(60px);
+    transition: opacity 0.45s ease, transform 0.45s ease;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  .slide.active {
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: auto;
+  }
+  .slide.exit {
+    opacity: 0;
+    transform: translateX(-60px);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+  }
+
+  /* ── Decorative top strip ─────────────────────────────────── */
+  .slide::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--teal) 0%, var(--accent) 50%, transparent 100%);
+  }
+
+  /* ── Navigation bar ───────────────────────────────────────── */
+  #nav {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: 52px;
+    background: rgba(13,27,42,0.95);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    z-index: 100;
+  }
+  #nav button {
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--accent);
+    padding: 0.4rem 1.4rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  #nav button:hover { background: rgba(0,180,216,0.15); }
+  #slide-counter {
+    font-size: 0.8rem;
+    color: var(--muted);
+    min-width: 80px;
+    text-align: center;
+  }
+
+  /* ── Progress dots ───────────────────────────────────────── */
+  #dots {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+    flex-wrap: wrap;
+    max-width: 420px;
+  }
+  .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+    cursor: pointer;
+    transition: background 0.2s, transform 0.2s;
+  }
+  .dot.active { background: var(--teal); transform: scale(1.4); }
+
+  /* ── Typography ──────────────────────────────────────────── */
+  .slide-tag {
+    font-size: 0.7rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--teal);
+    margin-bottom: 0.6rem;
+    font-weight: 600;
+  }
+  h1 {
+    font-size: 2.6rem;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 0.4rem;
+    color: var(--text);
+  }
+  h2 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 1.4rem;
+  }
+  .subtitle {
+    font-size: 1rem;
+    color: var(--muted);
+    margin-bottom: 2rem;
+  }
+
+  /* ── Cards ───────────────────────────────────────────────── */
+  .cards {
+    display: grid;
+    gap: 1rem;
+    flex: 1;
+  }
+  .cards.col2 { grid-template-columns: 1fr 1fr; }
+  .cards.col3 { grid-template-columns: 1fr 1fr 1fr; }
+  .cards.col4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.2rem 1.4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .card.accent-teal  { border-left: 3px solid var(--teal); }
+  .card.accent-gold  { border-left: 3px solid var(--gold); }
+  .card.accent-green { border-left: 3px solid var(--green); }
+  .card.accent-red   { border-left: 3px solid var(--red); }
+
+  .card-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--teal);
+    letter-spacing: 0.5px;
+  }
+  .card-body {
+    font-size: 0.82rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .card-num {
+    font-size: 2.2rem;
+    font-weight: 800;
+    color: var(--accent);
+    line-height: 1;
+  }
+  .card-num-label {
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+
+  /* ── Lists ───────────────────────────────────────────────── */
+  ul.bullets { list-style: none; display: flex; flex-direction: column; gap: 0.55rem; }
+  ul.bullets li {
+    font-size: 0.88rem;
+    color: var(--text);
+    padding-left: 1.2rem;
+    position: relative;
+    line-height: 1.5;
+  }
+  ul.bullets li::before {
+    content: '▸';
+    color: var(--teal);
+    position: absolute;
+    left: 0;
+    font-size: 0.75rem;
+    top: 0.15rem;
+  }
+  ul.bullets.muted li { color: var(--muted); }
+
+  /* ── Timeline ────────────────────────────────────────────── */
+  .timeline {
+    display: flex;
+    gap: 0;
+    flex: 1;
+    align-items: stretch;
+  }
+  .tl-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+  .tl-item:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 28px;
+    right: -1px;
+    width: 2px;
+    height: calc(100% - 28px);
+    background: var(--border);
+  }
+  .tl-header {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    margin-bottom: 0.8rem;
+    padding-right: 1rem;
+  }
+  .tl-num {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+  }
+  .tl-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.3;
+  }
+  .tl-date { font-size: 0.72rem; color: var(--muted); }
+  .tl-body {
+    padding-left: 1rem;
+    padding-right: 1.5rem;
+    font-size: 0.78rem;
+    color: var(--muted);
+    line-height: 1.5;
+    border-left: 2px solid var(--border);
+    margin-left: 17px;
+    flex: 1;
+  }
+  .tl-body li { margin-bottom: 0.3rem; list-style: none; padding-left: 0.8rem; position: relative; }
+  .tl-body li::before { content: '·'; position: absolute; left: 0; color: var(--teal); }
+
+  /* ── Table ───────────────────────────────────────────────── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+  }
+  th {
+    background: rgba(0,180,216,0.15);
+    color: var(--accent);
+    padding: 0.55rem 0.8rem;
+    text-align: left;
+    font-weight: 700;
+    font-size: 0.78rem;
+    letter-spacing: 0.3px;
+  }
+  td {
+    padding: 0.5rem 0.8rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    vertical-align: top;
+    line-height: 1.45;
+    font-size: 0.79rem;
+  }
+  tr:hover td { background: rgba(255,255,255,0.03); }
+
+  /* ── Badge / tag ─────────────────────────────────────────── */
+  .badge {
+    display: inline-block;
+    padding: 0.15rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    margin-right: 0.3rem;
+  }
+  .badge.teal  { background: rgba(0,180,216,0.2);  color: var(--accent); }
+  .badge.gold  { background: rgba(244,162,97,0.2); color: var(--gold);   }
+  .badge.green { background: rgba(82,183,136,0.2); color: var(--green);  }
+  .badge.red   { background: rgba(230,57,70,0.2);  color: #ff9099;       }
+
+  /* ── Two-column layout ───────────────────────────────────── */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    flex: 1;
+  }
+  .col { display: flex; flex-direction: column; gap: 0.8rem; }
+
+  /* ── Section heading inside card ─────────────────────────── */
+  .section-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--muted);
+    margin-top: 0.4rem;
+    margin-bottom: 0.1rem;
+    font-weight: 600;
+  }
+
+  /* ── Stat row ────────────────────────────────────────────── */
+  .stats-row {
+    display: flex;
+    gap: 1.2rem;
+    margin-bottom: 1.4rem;
+  }
+  .stat-box {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.8rem 1.2rem;
+    text-align: center;
+    flex: 1;
+  }
+  .stat-big { font-size: 2rem; font-weight: 800; color: var(--accent); }
+  .stat-label { font-size: 0.72rem; color: var(--muted); margin-top: 0.2rem; }
+
+  /* ── Title slide bg ──────────────────────────────────────── */
+  .slide.title-slide {
+    background: radial-gradient(ellipse at 70% 30%, rgba(0,180,216,0.12) 0%, transparent 60%),
+                radial-gradient(ellipse at 20% 80%, rgba(82,183,136,0.08) 0%, transparent 50%),
+                var(--navy);
+    justify-content: center;
+  }
+  .title-slide h1 { font-size: 3rem; margin-bottom: 0.8rem; }
+  .title-slide .subtitle { font-size: 1.05rem; margin-bottom: 2.5rem; }
+  .meta-row {
+    display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
+  }
+  .meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+  .meta-label { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+  .meta-value { font-size: 0.9rem; color: var(--accent); font-weight: 600; }
+
+  /* ── Issue list ──────────────────────────────────────────── */
+  .issue-list { display: flex; flex-direction: column; gap: 0.7rem; flex: 1; overflow-y: auto; }
+  .issue-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.5rem 0.9rem;
+    align-items: start;
+  }
+  .issue-num {
+    width: 26px; height: 26px;
+    background: rgba(0,180,216,0.2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: var(--teal);
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .issue-title { font-size: 0.83rem; font-weight: 700; color: var(--text); margin-bottom: 0.15rem; }
+  .issue-fix   { font-size: 0.77rem; color: var(--muted); line-height: 1.45; }
+
+  /* ── Keyboard hint ───────────────────────────────────────── */
+  #kbd-hint {
+    position: fixed;
+    top: 1rem; right: 1.5rem;
+    font-size: 0.68rem;
+    color: var(--muted);
+    opacity: 0.6;
+  }
+
+  /* ── Phase banner ─────────────────────────────────────────── */
+  .phase-banner {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    background: rgba(0,180,216,0.12);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.3rem 0.9rem;
+    margin-bottom: 1.2rem;
+    font-size: 0.78rem;
+    color: var(--accent);
+    font-weight: 600;
+  }
+</style>
+</head>
+<body>
+
+<div id="kbd-hint">← → 或 空白鍵 換頁</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 1 — TITLE
+═══════════════════════════════════════════════════════════ -->
+<div id="deck">
+<div class="slide title-slide active" data-index="0">
+  <div class="slide-tag">TASA × NTHU ｜ 產學合作研究計畫</div>
+  <h1>任務排程系統<br>新模組開發</h1>
+  <p class="subtitle">四階段成果摘要 · Mission Scheduling System — New Module Development</p>
+  <div class="meta-row">
+    <div class="meta-item">
+      <span class="meta-label">委託單位</span>
+      <span class="meta-value">國家太空中心 TASA</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">執行單位</span>
+      <span class="meta-value">國立清華大學 工業工程與工程管理學系</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">應用衛星</span>
+      <span class="meta-value">福衛八號 (FORMOSAT-8)</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">合約期間</span>
+      <span class="meta-value">2023 / 09 — 2024 / 09</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 2 — 專案概覽
+═══════════════════════════════════════════════════════════ -->
+<div class="slide" data-index="1">
+  <div class="slide-tag">OVERVIEW</div>
+  <h2>專案概覽</h2>
+
+  <div class="stats-row">
+    <div class="stat-box">
+      <div class="stat-big">4</div>
+      <div class="stat-label">開發階段</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-big">12</div>
+      <div class="stat-label">合約月數</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-big">66+</div>
+      <div class="stat-label">數學限制式</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-big">10</div>
+      <div class="stat-label">衛星活動類型</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-big">28</div>
+      <div class="stat-label">測試問題修訂</div>
+    </div>
+  </div>
+
+  <div class="cards col2" style="flex:1">
+    <div class="card accent-teal">
+      <div class="card-title">核心目標</div>
+      <div class="card-body">
+        <ul class="bullets muted">
+          <li>建立衛星排程最佳化模型（ILOG CPLEX）</li>
+          <li>應用於福衛八號遙測衛星系統</li>
+          <li>根據現有資源進行自動化最佳排程</li>
+          <li>支援多衛星任務操作</li>
+          <li>生成無衝突的排程結果</li>
+          <li>具備排程重新規劃功能</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card accent-gold">
+      <div class="card-title">排程模式</div>
+      <div class="card-body">
+        <div class="section-label">Cold Scheduling</div>
+        根據 S-band 地面站接觸資訊，創建 Monitoring 活動並進行整體規劃。
+        <div class="section-label" style="margin-top:0.6rem">Hot Scheduling</div>
+        根據 X-band 地面站接觸資訊，創建 GAT / GOHOME Maneuver 並動態排入。
+        <div class="section-label" style="margin-top:0.6rem">微調功能</div>
+        runUIReHot · addResourceChange · adjustActivity · runUIReFilterHot1/2
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 3 — 四階段期程
+═══════════════════════════════════════════════════════════ -->
+<div class="slide" data-index="2">
+  <div class="slide-tag">TIMELINE</div>
+  <h2>四階段期程發展</h2>
+
+  <div class="timeline" style="flex:1; gap:1rem">
+    <div class="tl-item">
+      <div class="tl-header">
+        <div class="tl-num" style="background:rgba(0,180,216,0.25);color:var(--teal)">01</div>
+        <div>
+          <div class="tl-title">需求分析</div>
+          <div class="tl-date">決標後 1 個月 · 2023/10</div>
+        </div>
+      </div>
+      <div class="tl-body">
+        <li>系統分析設計規劃書</li>
+        <li>資料庫設計書</li>
+        <li>系統設計審核報告</li>
+        <li>數學模型建立</li>
+        <li>任務限制式定義（66+）</li>
+      </div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-header">
+        <div class="tl-num" style="background:rgba(244,162,97,0.25);color:var(--gold)">02</div>
+        <div>
+          <div class="tl-title">原型系統開發</div>
+          <div class="tl-date">決標後 3 個月 · 2023/12</div>
+        </div>
+      </div>
+      <div class="tl-body">
+        <li>原型系統開發審核報告</li>
+        <li>原型系統開發測試報告</li>
+        <li>程式流程與功能說明書</li>
+        <li>CPLEX 模型實作</li>
+        <li>各活動物件與限制函式</li>
+      </div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-header">
+        <div class="tl-num" style="background:rgba(82,183,136,0.25);color:var(--green)">03</div>
+        <div>
+          <div class="tl-title">模型優化與測試</div>
+          <div class="tl-date">決標後 8 個月 · 2024/05</div>
+        </div>
+      </div>
+      <div class="tl-body">
+        <li>模型優化與測試審核報告</li>
+        <li>模型優化與測試報告</li>
+        <li>15 項測試問題排查修訂</li>
+        <li>CPLEX 參數調優</li>
+        <li>Cold / Hot Scheduling 整合</li>
+      </div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-header">
+        <div class="tl-num" style="background:rgba(144,224,239,0.25);color:var(--accent)">04</div>
+        <div>
+          <div class="tl-title">系統整合與測試</div>
+          <div class="tl-date">決標後 12 個月 · 2024/09</div>
+        </div>
+      </div>
+      <div class="tl-body">
+        <li>系統整合測試審核報告</li>
+        <li>模型開發與測試報告書</li>
+        <li>教育訓練手冊</li>
+        <li>系統操作與使用手冊</li>
+        <li>13 項測試問題修訂</li>
+        <li>保固證明書</li>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 4 — 系統架構
+═══════════════════════════════════════════════════════════ -->
+<div class="slide" data-index="3">
+  <div class="slide-tag">ARCHITECTURE</div>
+  <h2>系統架構與資料庫</h2>
+
+  <div class="two-col">
+    <div class="col">
+      <div class="card accent-teal">
+        <div class="card-title">資料庫核心實體</div>
+        <div class="card-body">
+          <table>
+            <tr><th>實體</th><th>說明</th></tr>
+            <tr><td>SATELLITEPS</td><td>衛星本體資訊（psid、sessions）</td></tr>
+            <tr><td>RECORDERPS</td><td>記錄器參數（容量、壓縮比）</td></tr>
+            <tr><td>ACTIVITY</td><td>所有衛星活動清單</td></tr>
+            <tr><td>CONTACT</td><td>地面站接觸時窗</td></tr>
+            <tr><td>SITE</td><td>地面站資訊</td></tr>
+            <tr><td>ECLIPSE</td><td>衛星日食時段</td></tr>
+            <tr><td>SESSIONS</td><td>軌道圈次資訊</td></tr>
+            <tr><td>RSIIMAGINGREQUESTS</td><td>RSI 影像拍照請求</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card accent-gold">
+        <div class="card-title">衛星活動類型（10 種）</div>
+        <div class="card-body">
+          <ul class="bullets">
+            <li><span class="badge teal">姿態</span> Attitude Maneuver</li>
+            <li><span class="badge teal">軌道</span> Orbit Maneuver</li>
+            <li><span class="badge teal">充電</span> GOHOME Maneuver</li>
+            <li><span class="badge teal">傳輸</span> GAT Maneuver</li>
+            <li><span class="badge gold">監控</span> Monitoring（S-band）</li>
+            <li><span class="badge gold">拍照</span> RSI Record</li>
+            <li><span class="badge gold">下載</span> RSI Playback（X-band）</li>
+            <li><span class="badge gold">刪除</span> RSI Delete</li>
+            <li><span class="badge green">SPL</span> SPL Procedure</li>
+            <li><span class="badge green">SPL</span> SPL Playback</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 5 — 數學模型與目標
+═══════════════════════════════════════════════════════════ -->
+<div class="slide" data-index="4">
+  <div class="slide-tag">MATHEMATICAL MODEL</div>
+  <h2>數學模型與最佳化目標</h2>
+
+  <div class="two-col">
+    <div class="col">
+      <div class="card accent-teal">
+        <div class="card-title">決策變數</div>
+        <div class="card-body">
+          <ul class="bullets">
+            <li>二元變數：決定各活動是否執行</li>
+            <li>整數變數：決定 RSI Playback / Delete 活動開始時間</li>
+            <li>站點選擇變數：決定地面站指派</li>
+          </ul>
+        </div>
+      </div>
+      <div class="card accent-gold">
+        <div class="card-title">目標函數（最大化）</div>
+        <div class="card-body">
+          <ul class="bullets">
+            <li>最大化可執行的活動總數</li>
+            <li>Monitoring / RSI Playback 盡量選 prefer site</li>
+            <li>RSI Playback 與 RSI Delete 越早完成越好</li>
+          </ul>
+        </div>
+      </div>
+      <div class="card accent-green">
+        <div class="card-title">CPLEX 求解器調優參數</div>
+        <div class="card-body">
+          <ul class="bullets">
+            <li>Threads：8</li>
+            <li>Gomory Cuts：2（Aggressive）</li>
+            <li>Cliques Cuts：2（Aggressive）</li>
+            <li>NodeSelect：2（Best-Estimate Search）</li>
+            <li>BigM 值 ≥ 1,000,000（5天 × 86400）</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card accent-red">
+        <div class="card-title">主要限制式類別（66+ 條）</div>
+        <div class="card-body">
+          <table>
+            <tr><th>類別</th><th>說明</th></tr>
+            <tr><td>活動不重疊</td><td>各活動自身及彼此間不可重疊</td></tr>
+            <tr><td>GOHOME 充電</td><td>每 50 分鐘須回到 GOHOME 充電</td></tr>
+            <tr><td>S-band 接觸</td><td>Monitoring / SPL 須在 S-band 時窗</td></tr>
+            <tr><td>X-band 接觸</td><td>RSI Playback 須在 11.5° X-band 時窗</td></tr>
+            <tr><td>Eclipse 接觸</td><td>SPL Procedure 須在日食中執行</td></tr>
+            <tr><td>Duty Cycle</td><td>RSI Record ≤ 8 min/軌；Playback ≤ 10 min/軌</td></tr>
+            <tr><td>活動先後順序</td><td>REC → PBK → DEL；GAT → PBK → GOHOME</td></tr>
+            <tr><td>記憶體容量</td><td>執行前確保記憶體足夠</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 6 — 第一階段重點
+═══════════════════════════════════════════════════════════ -->
+<div class="slide" data-index="5">
+  <div class="phase-banner">
+    <span style="background:rgba(0,180,216,0.3);padding:0.1rem 0.5rem;border-radius:4px">第一階段</span>
+    需求分析 ｜ 2023 / 10 / 20
+  </div>
+  <h2 style="margin-bottom:0.8rem">需求分析與數學模型建立</h2>
+
+  <div class="cards col3" style="flex:1">
+    <div class="card accent-teal">
+      <div class="card-title">前言目標</div>
+      <div class="card-body">
+        <ul class="bullets muted">
+          <li>建立衛星排程最佳化模型</li>
+          <li>唯一使用 ILOG CPLEX 的部分</li>
+          <li>支援福衛八號多衛星操作</li>
+          <li>根據軌道資料進行預先規劃</li>
+          <li>管理衛星和地面站資源</li>
+          <li>生成無衝突排程結果</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card accent-gold">
+      <div class="card-title">活動核心限制</div>
+      <div class="card-body">
+        <ul class="bullets muted">
+          <li>RSI REC 每軌最多 8 分鐘</li>
+          <li>GOHOME 每 50 分鐘充電一次</li>
+          <li>RSI PBK 須在 11.5° X-band 時窗</li>
+          <li>SPL PRO 須在日食 + 10° S-band</li>
+          <li>同 entry ID 活動需按序執行</li>
+          <li>記憶體容量不足時 REC 不可執行</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card accent-green">
+      <div class="card-title">系統功能需求</div>
+      <div class="card-body">
+        <ul class="bullets muted">
+          <li>可對衛星軌道及地面站資源規劃</li>
+          <li>可解決排程衝突</li>
+          <li>可同時支援多衛星操作</li>
+          <li>可支援長短期規劃與調度</li>
+          <li>可支援科學資料活動收集</li>
+          <li>可進行快速重新規劃</li>
+          <li>可支援發射及緊急規劃</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 7 — 第二階段重點
+═══════════════════════════════════════════════════════════ -->
+<div class="slide" data-index="6">
+  <div class="phase-banner">
+    <span style="background:rgba(244,162,97,0.3);padding:0.1rem 0.5rem;border-radius:4px">第二階段</span>
+    原型系統開發 ｜ 2023 / 12 / 19
+  </div>
+  <h2 style="margin-bottom:0.8rem">原型系統程式架構</h2>
+
+  <div class="two-col">
+    <div class="col">
+      <div class="card accent-gold">
+        <div class="card-title">主要程式模組</div>
+        <div class="card-body">
+          <table>
+            <tr><th>函式</th><th>用途</th></tr>
+            <tr><td>self_overlap()</td><td>同類活動不重疊限制</td></tr>
+            <tr><td>other_overlap()</td><td>跨類活動不重疊限制</td></tr>
+            <tr><td>var_self/other_overlap()</td><td>起始時間為變數的重疊限制</td></tr>
+            <tr><td>s_band_contact()</td><td>S-band 地面站接觸限制</td></tr>
+            <tr><td>x_band_contact()</td><td>X-band 地面站接觸限制</td></tr>
+            <tr><td>eclipse_contact()</td><td>日食時段限制</td></tr>
+            <tr><td>duty_cycle()</td><td>每軌最長執行時間限制</td></tr>
+            <tr><td>memory_capacity()</td><td>記憶體容量限制</td></tr>
+            <tr><td>connection()</td><td>活動先後順序限制</td></tr>
+            <tr><td>get_pbk/del_time()</td><td>計算 PBK/DEL 起始時間</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card accent-teal">
+        <div class="card-title">系統執行流程</div>
+        <div class="card-body">
+          <ul class="bullets">
+            <li>宣告二元/整數決策變數</li>
+            <li>設定最大化目標函數</li>
+            <li>透過物件導向建立各活動限制</li>
+            <li>呼叫 CPLEX 求最佳排程解</li>
+            <li>排程結果寫入 EXTENT 表格</li>
+            <li>更新 ACTIVITY 表格相關欄位</li>
+          </ul>
+        </div>
+      </div>
+      <div class="card accent-green">
+        <div class="card-title">測試結果</div>
+        <div class="card-body">
+          <ul class="bullets">
+            <li>Monitoring 活動正確排入 S-band 時窗</li>
+            <li>RSI_REC / PBK / DEL 按序正確執行</li>
+            <li>GOHOME 充電路徑透過 dummy point 解決</li>
+            <li>原型系統可成功求解並輸出排程結果</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 8 — 第三階段問題修訂
+═══════════════════════════════════════════════════════════ -->
+<div class="slide" data-index="7">
+  <div class="phase-banner">
+    <span style="background:rgba(82,183,136,0.3);padding:0.1rem 0.5rem;border-radius:4px">第三階段</span>
+    模型優化與測試 ｜ 2024 / 05 / 08
+  </div>
+  <h2 style="margin-bottom:0.8rem">測試問題修訂（15 項）</h2>
+
+  <div class="issue-list">
+    <div class="issue-item">
+      <div class="issue-num">1</div>
+      <div>
+        <div class="issue-title">系統產生的 GAT 影響求解結果</div>
+        <div class="issue-fix">X-band contact 起迄時間含小數點；修訂：抓取範圍由 180 秒改為 181 秒</div>
+      </div>
+    </div>
+    <div class="issue-item">
+      <div class="issue-num">2</div>
+      <div>
+        <div class="issue-title">重複執行模型時出現無解</div>
+        <div class="issue-fix">模型求解後未清空內部資料；修訂：單次求解後將所有資料清空回到初始狀態</div>
+      </div>
+    </div>
+    <div class="issue-item">
+      <div class="issue-num">3</div>
+      <div>
+        <div class="issue-title">RSI Record 檔名出現重複</div>
+        <div class="issue-fix">前處理未考量未排程活動；修訂：檔名處理統一移至排程後再進行</div>
+      </div>
+    </div>
+    <div class="issue-item">
+      <div class="issue-num">4</div>
+      <div>
+        <div class="issue-title">模型排程結果不符預期（RSI PBK 時間過於分散）</div>
+        <div class="issue-fix">活動增多後 gap 設定使模型提早停止；修訂：調整目標式權重、限制式寫法及 gap 值</div>
+      </div>
+    </div>
+    <div class="issue-item">
+      <div class="issue-num">5</div>
+      <div>
+        <div class="issue-title">GAT / GOHOME 生成時未考量 Attitude Maneuver</div>
+        <div class="issue-fix">修訂：前處理建立時確認兩活動間是否存在 Attitude Maneuver，並新增 RSI PBK 限制</div>
+      </div>
+    </div>
+    <div class="issue-item">
+      <div class="issue-num">6</div>
+      <div>
+        <div class="issue-title">模型執行效率與品質無法平衡</div>
+        <div class="issue-fix">修訂 CPLEX 參數：8 Threads、Aggressive Gomory/Cliques Cuts、Best-Estimate Node Search</div>
+      </div>
+    </div>
+    <div class="issue-item">
+      <div class="issue-num">7</div>
+      <div>
+        <div class="issue-title">跨 session 排程造成無解</div>
+        <div class="issue-fix">GAT/GOHOME 生成只依 X-band 時間篩選；BigM 值設定 ≥ 1,000,000</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 9 — 第四階段：額外功能
+═══════════════════════════════════════════════════════════ -->
+<div class="slide" data-index="8">
+  <div class="phase-banner">
+    <span style="background:rgba(144,224,239,0.3);padding:0.1rem 0.5rem;border-radius:4px">第四階段</span>
+    系統整合與測試 ｜ 2024 / 09 / 25
+  </div>
+  <h2 style="margin-bottom:0.8rem">額外排程功能與系統設計</h2>
+
+  <div class="cards col2" style="flex:1">
+    <div class="col" style="gap:0.75rem">
+      <div class="card accent-teal">
+        <div class="card-title">runUIReHot</div>
+        <div class="card-body">針對無法排入的活動，經使用者調整後嘗試 Hot Scheduling，在不影響已排程活動前提下排入。</div>
+      </div>
+      <div class="card accent-teal">
+        <div class="card-title">addResourceChange</div>
+        <div class="card-body">嘗試在不影響已排程活動前提下，移動已排入的 RSI Delete 位置，無法滿足則不調整。</div>
+      </div>
+      <div class="card accent-teal">
+        <div class="card-title">adjustActivity</div>
+        <div class="card-body">針對已排程活動調整執行時間，在不影響其他活動前提下依使用者需求調整；無法滿足則不動。</div>
+      </div>
+    </div>
+    <div class="col" style="gap:0.75rem">
+      <div class="card accent-gold">
+        <div class="card-title">runUIReFilterHot1 / Hot2</div>
+        <div class="card-body">針對未排程的活動，在不影響已排程活動前提下嘗試 Hot Scheduling 排入。兩者處理策略不同。</div>
+      </div>
+      <div class="card accent-green">
+        <div class="card-title">系統參數設定</div>
+        <div class="card-body">
+          <ul class="bullets muted">
+            <li>參數定義於 <strong>config.properties</strong></li>
+            <li>使用者可自行設定排程參數值</li>
+            <li>包含活動優先順序、時間窗口、Duty Cycle 上限等</li>
+          </ul>
+        </div>
+      </div>
+      <div class="card accent-red">
+        <div class="card-title">無法排程原因偵測</div>
+        <div class="card-body">新增「最小化」目標模型，偵測造成無解的衝突限制式（Attitude、GAT、Orbit、GOHOME、RSI Record、RSI Playback 各方向重疊偵測）。</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 10 — 第四階段問題修訂
+═══════════════════════════════════════════════════════════ -->
+<div class="slide" data-index="9">
+  <div class="phase-banner">
+    <span style="background:rgba(144,224,239,0.3);padding:0.1rem 0.5rem;border-radius:4px">第四階段</span>
+    測試問題修訂（13 項）
+  </div>
+  <h2 style="margin-bottom:0.8rem">測試問題修訂（13 項）</h2>
+
+  <div class="issue-list">
+    <div class="issue-item">
+      <div class="issue-num">1</div>
+      <div>
+        <div class="issue-title">addResourceChange 檔名檢查機制不完善</div>
+        <div class="issue-fix">排序時未使用更新後的 RSI Delete 時間；修訂：以 addResourceChange 更新後時間排序後再做活動建立</div>
+      </div>
+    </div>
+    <div class="issue-item">
+      <div class="issue-num">2</div>
+      <div>
+        <div class="issue-title">確定性活動重疊導致排程時間過長</div>
+        <div class="issue-fix">以前處理檢查確定活動間重疊，依 scheduled → config.priority → starttime 排序強制決定執行與否</div>
+      </div>
+    </div>
+    <div class="issue-item">
+      <div class="issue-num">3</div>
+      <div>
+        <div class="issue-title">新舊排程混合時檔名重複</div>
+        <div class="issue-fix">安排新排程活動檔名時，需考慮後方舊排程活動，調整陣列順序後再安排</div>
+      </div>
+    </div>
+    <div class="issue-item">
+      <div class="issue-num">4</div>
+      <div>
+        <div class="issue-title">Duty Cycle 限制造成模型無解</div>
+        <div class="issue-fix">RSI Playback 可能跨多個 duty cycle；修訂：歸屬 duty cycle 一律以活動開始時間判斷，不看結束時間</div>
+      </div>
+    </div>
+    <div class="issue-item">
+      <div class="issue-num">5</div>
+      <div>
+        <div class="issue-title">X-band Contact 資源未使用完全</div>
+        <div class="issue-fix">多項原因難以調整模型；修訂：以後處理微調排程結果，在不違反限制條件下將活動前移</div>
+      </div>
+    </div>
+    <div class="issue-item">
+      <div class="issue-num">6</div>
+      <div>
+        <div class="issue-title">有指定站的 RSI Playback 調整邏輯錯誤</div>
+        <div class="issue-fix">即便提供其他資訊，仍應以 RSI Playback 指定地面站為主，不是指定站則不可移動</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 11 — 活動限制總表
+═══════════════════════════════════════════════════════════ -->
+<div class="slide" data-index="10">
+  <div class="slide-tag">CONSTRAINTS SUMMARY</div>
+  <h2>活動限制完整對照表</h2>
+
+  <table style="flex:1">
+    <thead>
+      <tr>
+        <th>活動</th>
+        <th>核心時窗條件</th>
+        <th>不可重疊</th>
+        <th>先後相依</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="badge teal">ATT</span> Attitude Maneuver</td>
+        <td>—</td>
+        <td>ATT、ORB、GOHOME、GAT、REC、PBK</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td><span class="badge teal">ORB</span> Orbit Maneuver</td>
+        <td>—</td>
+        <td>ATT、ORB、GOHOME、GAT、REC、PBK、SPL_PRO、SPL_PBK</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td><span class="badge teal">GO</span> GOHOME Maneuver</td>
+        <td>每 50 分鐘充電</td>
+        <td>ATT、ORB、GAT、REC、PBK</td>
+        <td>PBK 執行後須進行 GOHOME</td>
+      </tr>
+      <tr>
+        <td><span class="badge teal">GAT</span> GAT Maneuver</td>
+        <td>—</td>
+        <td>ATT、ORB、GOHOME、GAT、REC、PBK</td>
+        <td>GAT 需在 PBK 前執行</td>
+      </tr>
+      <tr>
+        <td><span class="badge gold">MON</span> Monitoring</td>
+        <td>S-band 時窗</td>
+        <td>MON</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td><span class="badge gold">REC</span> RSI Record</td>
+        <td>每軌 ≤ 8 min；記憶體足夠</td>
+        <td>ATT、ORB、GOHOME、GAT、REC、PBK、DEL、SPL</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td><span class="badge gold">PBK</span> RSI Playback</td>
+        <td>11.5° X-band；每軌 ≤ 10 min</td>
+        <td>ORB、ATT、GOHOME、GAT、REC、DEL</td>
+        <td>同 entry ID 之 REC 執行完才可 PBK</td>
+      </tr>
+      <tr>
+        <td><span class="badge gold">DEL</span> RSI Delete</td>
+        <td>PBK contact fade + 6 sec</td>
+        <td>REC、PBK、DEL</td>
+        <td>同 entry ID 之 REC + PBK 完成才可 DEL</td>
+      </tr>
+      <tr>
+        <td><span class="badge green">SPL</span> SPL Procedure</td>
+        <td>10° S-band + Eclipse</td>
+        <td>ORB、SPL_PRO</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td><span class="badge green">SPL</span> SPL Playback</td>
+        <td>S-band 接觸</td>
+        <td>ORB、SPL_PBK</td>
+        <td>同 entry ID 之 SPL_PRO 完成才可 PBK</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 12 — 專案成果摘要
+═══════════════════════════════════════════════════════════ -->
+<div class="slide" data-index="11">
+  <div class="slide-tag">CONCLUSION</div>
+  <h2>專案成果摘要</h2>
+
+  <div class="stats-row" style="margin-bottom:1.2rem">
+    <div class="stat-box">
+      <div class="stat-big" style="color:var(--green)">✓</div>
+      <div class="stat-label">第一階段<br>需求分析完成</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-big" style="color:var(--green)">✓</div>
+      <div class="stat-label">第二階段<br>原型系統完成</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-big" style="color:var(--green)">✓</div>
+      <div class="stat-label">第三階段<br>模型優化完成</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-big" style="color:var(--green)">✓</div>
+      <div class="stat-label">第四階段<br>系統整合完成</div>
+    </div>
+  </div>
+
+  <div class="cards col2" style="flex:1">
+    <div class="card accent-green">
+      <div class="card-title">技術成果</div>
+      <div class="card-body">
+        <ul class="bullets">
+          <li>完整衛星任務排程最佳化系統（CPLEX）</li>
+          <li>66+ 條數學限制式涵蓋全部活動</li>
+          <li>Cold / Hot Scheduling 雙模式架構</li>
+          <li>5 種額外微調排程功能</li>
+          <li>無法排程原因自動偵測模型</li>
+          <li>config.properties 可調式系統參數</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card accent-teal">
+      <div class="card-title">交付文件（12 份）</div>
+      <div class="card-body">
+        <ul class="bullets">
+          <li>系統分析設計規劃書（兩版）</li>
+          <li>資料庫設計書</li>
+          <li>第一、二、三、四階段審核報告</li>
+          <li>原型系統 / 模型開發與測試報告</li>
+          <li>程式流程與功能說明書</li>
+          <li>系統操作與使用手冊</li>
+          <li>教育訓練手冊</li>
+          <li>保固證明書</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- #deck -->
+
+<!-- ── Navigation ─────────────────────────────────────────── -->
+<div id="nav">
+  <button id="btn-prev">◀ 上一頁</button>
+  <div id="dots"></div>
+  <span id="slide-counter">1 / 12</span>
+  <button id="btn-next">下一頁 ▶</button>
+</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const total  = slides.length;
+  let current  = 0;
+
+  // Build dots
+  const dotsContainer = document.getElementById('dots');
+  slides.forEach((_, i) => {
+    const d = document.createElement('div');
+    d.className = 'dot' + (i === 0 ? ' active' : '');
+    d.addEventListener('click', () => goTo(i));
+    dotsContainer.appendChild(d);
+  });
+
+  function goTo(idx) {
+    if (idx === current) return;
+    const prev = current;
+    slides[prev].classList.remove('active');
+    slides[prev].classList.add('exit');
+    setTimeout(() => slides[prev].classList.remove('exit'), 350);
+
+    current = (idx + total) % total;
+    slides[current].classList.add('active');
+
+    document.querySelectorAll('.dot').forEach((d, i) => {
+      d.classList.toggle('active', i === current);
+    });
+    document.getElementById('slide-counter').textContent = `${current + 1} / ${total}`;
+  }
+
+  document.getElementById('btn-next').addEventListener('click', () => goTo(current + 1));
+  document.getElementById('btn-prev').addEventListener('click', () => goTo(current - 1));
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === ' ')  goTo(current + 1);
+    if (e.key === 'ArrowLeft')                     goTo(current - 1);
+  });
+
+  // Touch / swipe support
+  let touchX = null;
+  document.addEventListener('touchstart', e => { touchX = e.touches[0].clientX; });
+  document.addEventListener('touchend',   e => {
+    if (touchX === null) return;
+    const dx = e.changedTouches[0].clientX - touchX;
+    if (Math.abs(dx) > 50) goTo(dx < 0 ? current + 1 : current - 1);
+    touchX = null;
+  });
+</script>
+</body>
+</html>
